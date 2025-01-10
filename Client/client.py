@@ -4,8 +4,9 @@ import time
 import struct
 
 # Client settings
+UDP_BROADCAST_PORT = 12345
 UDP_PORT = 13117
-TCP_PORT = 12346
+TCP_PORT = 7490
 MAGIC_COOKIE = b"\xab\xcd\xdc\xba"  # Magic cookie for packet format
 
 
@@ -20,7 +21,7 @@ class Client:
         self.server_address = None
         self.states = {"Startup": 0,
                        "Looking for a server": 1, "Speed test": 2}
-        self.debug = False
+        self.debug = True
 
     def start_client(self):
         self.startup()
@@ -29,14 +30,14 @@ class Client:
             self.looking_for_server()
         except KeyboardInterrupt:
             if self.debug:
-                print("Exiting...")
+                print("DEBUG-----Exiting...")
             self.udp_socket.close()
             return
 
     def startup(self):
         self.client_state = self.states["Startup"]
         if self.debug:
-            print("state: ", self.client_state)
+            print("DEBUG-----state: ", self.client_state)
         while True:
             try:
                 self.file_size = int(input("Enter file size: "))
@@ -56,7 +57,7 @@ class Client:
     def looking_for_server(self):
         self.client_state = self.states["Looking for a server"]
         if self.debug:
-            print("state: ", self.client_state)
+            print("DEBUG-----state: ", self.client_state)
 
         wait_for_offer = True
         while wait_for_offer:
@@ -74,8 +75,8 @@ class Client:
 
     def handle_received_data(self, data, address):
         if self.debug:
-            print(f"\nReceived message: {data[:10]}")
-            print(f"From address: {address}\n")
+            print(f"DEBUG-----Received message: {data[:10]}")
+            print(f"DEBUG-----From address: {address}")
         if data.startswith(MAGIC_COOKIE):
             message_type = data[4]
             if message_type == 0x2:
@@ -84,13 +85,19 @@ class Client:
     def handle_offer(self, data, address):
         self.server_udp_port = int.from_bytes(data[5:7], 'big')
         self.server_tcp_port = int.from_bytes(data[7:9], 'big')
+        print(f"Received offer from {address} with UDP port {
+              self.server_udp_port} and TCP port {self.server_tcp_port}")
         print(f"Received offer from {address}")
-        self.server_address = address  # Save server address
+        # Save server address
+        # Update self.server_address with correct TCP port and not UDP port
+        self.server_address = (address[0], self.server_tcp_port)
         self.request_file()  # Proceed to request file
 
     def request_file(self):
         request_packet = MAGIC_COOKIE + \
             bytes([0x3]) + self.file_size.to_bytes(8, 'big')
+
+        print(request_packet)
 
         # Start the requests in separate threads
         for _ in range(self.tcp_connections):
@@ -103,13 +110,12 @@ class Client:
     def request_tcp(self):
         try:
             if self.debug:
-                print("Connecting to server via TCP...")
+                print("DEBUG-----Connecting to server via TCP...")
             # Create a new TCP socket per thread
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as tcp_socket:
                 tcp_socket.connect(self.server_address)
                 tcp_socket.sendall(f"{self.file_size}\n".encode())
-                data_received = tcp_socket.recv(
-                    self.file_size)  # Receive the file data
+                data_received = tcp_socket.recv(self.file_size)
                 print(f"TCP transfer finished: received {
                       len(data_received)} bytes")
         except ConnectionRefusedError:
@@ -120,7 +126,7 @@ class Client:
     def request_udp(self, request_packet):
         try:
             if self.debug:
-                print("Sending UDP request...")
+                print("DEBUG-----Sending UDP request...")
             # Create a new UDP socket for sending
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
                 udp_socket.sendto(request_packet, self.server_address)
@@ -147,9 +153,9 @@ class Client:
 
     def create_udp_socket(self):
         self.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        # self.udp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+        # self.udp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         # Bind to listen for offers
-        self.udp_socket.bind(("", 12345))
+        self.udp_socket.bind(("", UDP_BROADCAST_PORT))
         # if self.debug:
         #     print(f"UDP socket created and bound to port {UDP_PORT}")
 
