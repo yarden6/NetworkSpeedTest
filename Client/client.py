@@ -3,17 +3,7 @@ import threading
 import time
 import struct
 from colorama import Fore, Style
-
-# Client settings
-UDP_BROADCAST_PORT = 12345
-UDP_PORT = 13117
-TCP_PORT = 7490
-MAGIC_COOKIE = b"\xab\xcd\xdc\xba"  # Magic cookie for packet format
-MESSAGE_TYPE_OFFER = 0x2
-MESSAGE_TYPE_REQUEST = 0x3
-MESSAGE_TYPE_PAYLOAD = 0x4
-
-MESSAGE_SIZE_PAYLOAD = 5
+import consts
 
 
 class Client:
@@ -25,8 +15,9 @@ class Client:
         self.server_UDP_port = None
         self.server_TCP_port = None
         self.server_IP_address = None
-        self.states = {"Startup": 0,
-                       "Looking for a server": 1, "Speed test": 2}
+        self.states = {0: "Startup",
+                       1: "Looking for a server", 2: "Speed test"}
+        self.client_state = 0
         self.debug = True
 
     def start_client(self):
@@ -34,7 +25,7 @@ class Client:
         self.create_udp_socket()  # Create the UDP socket before looking for a server
         while True:
             try:
-                if self.states == "Looking for a server":
+                if self.client_state == 1:
                     self.looking_for_server()
             except KeyboardInterrupt:
                 if self.debug:
@@ -43,10 +34,10 @@ class Client:
                 return
 
     def startup(self):
-        self.client_state = self.states["Startup"]
+        self.client_state = 0
         if self.debug:
             print(
-                f"{Fore.GREEN}DEBUG-----state: {self.client_state} {Style.RESET_ALL}")
+                f"{Fore.GREEN}DEBUG-----state: {self.states[self.client_state]} {Style.RESET_ALL}")
 
         while True:
             try:
@@ -59,7 +50,7 @@ class Client:
                 if self.file_size <= 0 or self.tcp_connections <= 0 or self.udp_connections <= 0:
                     raise ValueError("Please enter positive values.")
 
-                self.client_state = self.states["Looking for a server"]
+                self.client_state = 1
                 break  # Exit the loop if everything is correct
 
             except ValueError as e:
@@ -68,13 +59,12 @@ class Client:
     def looking_for_server(self):
         if self.debug:
             print(
-                f"{Fore.GREEN}DEBUG-----state: {self.client_state} {Style.RESET_ALL}")
+                f"{Fore.GREEN}DEBUG-----state: {self.states[self.client_state]} {Style.RESET_ALL}")
 
-        while self.states == "Looking for a server":
+        while self.client_state == 1:
             try:
                 print(f"Client started, listening for offer requests...")
                 data, address = self.udp_socket.recvfrom(1024)
-                self.states = self.states["speed test"]
                 self.handle_offer_packet(data, address)
 
             except KeyboardInterrupt:
@@ -84,7 +74,7 @@ class Client:
                 return
 
     def handle_payload_packet(self, data):
-        if data[:4] == MAGIC_COOKIE and data[4] == MESSAGE_TYPE_PAYLOAD:
+        if data[:4] == consts.MAGIC_COOKIE and data[4] == consts.MESSAGE_TYPE_PAYLOAD:
             total_seg_count = int.from_bytes(data[5:13], 'big')
             curr_seg_count = int.from_bytes(data[13:21], 'big')
             payload = data[21:].decode()
@@ -95,24 +85,22 @@ class Client:
         if self.debug:
             print(
                 f"{Fore.GREEN}DEBUG-----Received offer: {data[:10]} From: {address[0]} {Style.RESET_ALL}")
-        if data[:4] == MAGIC_COOKIE and data[4] == MESSAGE_TYPE_OFFER:
+        if data[:4] == consts.MAGIC_COOKIE and data[4] == consts.MESSAGE_TYPE_OFFER:
             self.server_UDP_port = int.from_bytes(data[5:7], 'big')
             self.server_TCP_port = int.from_bytes(data[7:9], 'big')
             self.server_IP_address = address[0]
             print(f"Received offer from {self.server_IP_address}")
-
-            self.client_state = self.states["Speed test"]
+            self.client_state = 2
             if self.debug:
                 print(
-                    f"{Fore.GREEN}DEBUG-----state: {self.client_state} {Style.RESET_ALL}")
+                    f"{Fore.GREEN}DEBUG-----state: {self.states[self.client_state]} {Style.RESET_ALL}")
+
             self.request_file()  # Proceed to request file
 
     def request_file(self):
-        request_packet = MAGIC_COOKIE + \
-            bytes([MESSAGE_TYPE_REQUEST]) + self.file_size.to_bytes(8, 'big')
-        if self.debug:
-            print(
-                f"{Fore.GREEN}DEBUG-----Request packet : {request_packet} {Style.RESET_ALL}")
+        request_packet = consts.MAGIC_COOKIE + \
+            bytes([consts.MESSAGE_TYPE_REQUEST]) + \
+            self.file_size.to_bytes(8, 'big')
 
         # Start the requests in separate threads
         for i in range(self.tcp_connections):
@@ -167,14 +155,14 @@ class Client:
                     packet, _ = udp_socket.recvfrom(1024)
                     if self.debug:
                         print(
-                            f"{Fore.LIGHTCYAN_EX}DEBUG-----UDP Received payload packet: {packet} {Style.RESET_ALL}")
+                            f"{Fore.LIGHTCYAN_EX}DEBUG-----UDP Received payload packet\n   packet: {packet} {Style.RESET_ALL}")
                     total_seg_count, curr_seg_count, payload = self.handle_payload_packet(
                         packet)
                     print(f"{Fore.LIGHTCYAN_EX} Received segment {
                         curr_seg_count}/{total_seg_count} {Style.RESET_ALL}")
                     recieved_seg_count += 1
                     total_bytes_received += len(payload)
-                    if len(packet) < 1024:  # End of transmission
+                    if len(packet) < consts.MESSAGE_SIZE_PAYLOAD:  # End of transmission
                         break
                 # except socket.timeout:
                 #     break  # Exit on timeout
@@ -191,7 +179,7 @@ class Client:
         self.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.udp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         # Bind to listen for offers
-        self.udp_socket.bind(("", UDP_BROADCAST_PORT))
+        self.udp_socket.bind(("", consts.UDP_BROADCAST_PORT))
 
 
 if __name__ == "__main__":

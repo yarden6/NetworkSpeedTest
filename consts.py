@@ -1,0 +1,10 @@
+UDP_PORT = 13117
+TCP_PORT = 7490
+
+MAGIC_COOKIE = b"\xab\xcd\xdc\xba"  # Magic cookie for packet format
+
+MESSAGE_TYPE_OFFER = 0x2
+MESSAGE_TYPE_REQUEST = 0x3
+MESSAGE_TYPE_PAYLOAD = 0x4
+
+MESSAGE_SIZE_PAYLOAD = 5

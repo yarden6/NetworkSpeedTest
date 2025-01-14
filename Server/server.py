@@ -4,23 +4,14 @@ import threading
 import time
 from colorama import Fore, Style
 import math
-
-# Server settings
-UDP_PORT = 13117
-TCP_PORT = 7490
-MAGIC_COOKIE = b"\xab\xcd\xdc\xba"  # Magic cookie for packet format
-MESSAGE_TYPE_OFFER = 0x2
-MESSAGE_TYPE_REQUEST = 0x3
-MESSAGE_TYPE_PAYLOAD = 0x4
-
-MESSAGE_SIZE_PAYLOAD = 5
+import consts
 
 
 class Server:
     def __init__(self, ip_address="192.168.1.118"):
         self.ip_address = ip_address
-        self.udp_port = UDP_PORT
-        self.tcp_port = TCP_PORT
+        self.udp_port = consts.UDP_PORT
+        self.tcp_port = consts.TCP_PORT
         self.debug = True
         self.udp_broadcast_server = None
         # self.tcp_server = None
@@ -57,7 +48,7 @@ class Server:
         while True:
             try:
                 data, address = udp_server.recvfrom(1024)
-                if data[:4] == MAGIC_COOKIE and data[4] == MESSAGE_TYPE_REQUEST:
+                if data[:4] == consts.MAGIC_COOKIE and data[4] == consts.MESSAGE_TYPE_REQUEST:
                     threading.Thread(target=self.process_udp_request,
                                      args=(data, address), daemon=True).start()
             except Exception as e:
@@ -125,7 +116,8 @@ class Server:
             client_socket.close()  # Close the client connection
 
     def build_offer_packet(self):
-        header = struct.pack('4sB', MAGIC_COOKIE, MESSAGE_TYPE_OFFER)
+        header = struct.pack('4sB', consts.MAGIC_COOKIE,
+                             consts.MESSAGE_TYPE_OFFER)
         message = struct.pack('>HH', self.udp_port, self.tcp_port)
         return header + message
 
@@ -143,7 +135,8 @@ class Server:
             return
 
     def build_payload_packet(self, total_seg_count: int, curr_seg_count: int, payload):
-        header = struct.pack('4sB', MAGIC_COOKIE, MESSAGE_TYPE_PAYLOAD)
+        header = struct.pack('4sB', consts.MAGIC_COOKIE,
+                             consts.MESSAGE_TYPE_PAYLOAD)
         total_seg_count = total_seg_count.to_bytes(8, 'big')
         curr_seg_count = curr_seg_count.to_bytes(8, 'big')
         return header + total_seg_count + curr_seg_count + payload
@@ -151,11 +144,13 @@ class Server:
     def send_payload(self, file_size, address):
         try:
             udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            total_seg_count = math.ceil(file_size / MESSAGE_SIZE_PAYLOAD)
+            total_seg_count = math.ceil(
+                file_size / consts.MESSAGE_SIZE_PAYLOAD)
             for i in range(total_seg_count):
                 curr_seg_count = i
-                offset = curr_seg_count * MESSAGE_SIZE_PAYLOAD
-                curr_seg_size = min(MESSAGE_SIZE_PAYLOAD, file_size - offset)
+                offset = curr_seg_count * consts.MESSAGE_SIZE_PAYLOAD
+                curr_seg_size = min(
+                    consts.MESSAGE_SIZE_PAYLOAD, file_size - offset)
                 curr_seg_data = ("a" * curr_seg_size).encode()
                 payload_packet = self.build_payload_packet(
                     total_seg_count, i, curr_seg_data)
@@ -164,7 +159,7 @@ class Server:
                     udp_socket.sendto(payload_packet, address)
                     if self.debug:
                         print(
-                            f"{Fore.LIGHTMAGENTA_EX}DEBUG-----Sent payload packet #{i} via UDP: {payload_packet} {Style.RESET_ALL}")
+                            f"{Fore.LIGHTMAGENTA_EX}DEBUG-----Sent payload packet #{i} via UDP\n   packet: {payload_packet} {Style.RESET_ALL}")
                 except Exception as e:
                     print(
                         f"An error occurred while sending payload: {str(e)}")
