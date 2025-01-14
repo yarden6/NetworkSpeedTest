@@ -115,7 +115,7 @@ class Client:
                              args=(request_packet,)).start()
             if self.debug:
                 print(
-                    f"{Fore.MAGENTA}DEBUG-----Sent request packet (UDP #{i}) {Style.RESET_ALL}")
+                    f"{Fore.MAGENTA}DEBUG-----Sent request packet (UDP #{i+1}) {Style.RESET_ALL}")
 
     def request_tcp(self):
         try:
@@ -126,11 +126,18 @@ class Client:
                 tcp_socket.sendall(f"{self.file_size}\n".encode())
                 start_time = time.time()
 
-                data_received = tcp_socket.recv(self.file_size)
+                data_received = tcp_socket.recv(self.file_size * 2)  # TODO
                 finish_time = time.time()
+                if self.debug:
+                    print(f"{Fore.LIGHTMAGENTA_EX}DEBUG-----TCP Received payload {
+                        data_received} {Style.RESET_ALL}")
 
-                total_time = finish_time - start_time
-                return len(data_received), total_time
+                total_bytes_received = len(data_received)
+                total_time = round(finish_time - start_time, 4)
+                total_speed = round(
+                    (total_bytes_received * 8) / total_time, 4)
+                print(f"TCP transfer finished,\n   total time: {
+                    total_time} seconds,\n   total speed: {total_speed} bits/second\n")
 
         except ConnectionRefusedError:
             print("Connection refused, server may not be available")
@@ -170,8 +177,8 @@ class Client:
                         total_time = round(finish_time - start_time, 4)
                         total_speed = round(
                             (total_bytes_received * 8) / total_time, 4)
-                        print(f"UDP transfer finished,\ntotal time: {
-                              total_time} seconds,\ntotal speed: {total_speed} bits/second")
+                        print(f"UDP transfer finished,\n   total time: {
+                              total_time} seconds,\n   total speed: {total_speed} bits/second\n")
                         self.UDP_transfer = False
                         break
                 # except socket.timeout:
