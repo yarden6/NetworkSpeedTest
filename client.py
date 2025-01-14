@@ -18,6 +18,8 @@ class Client:
         self.states = {0: "Startup",
                        1: "Looking for a server", 2: "Speed test"}
         self.client_state = 0
+        self.UDP_transfer = False
+        self.TCP_transfer = False
         self.debug = True
 
     def start_client(self):
@@ -76,9 +78,8 @@ class Client:
     def handle_payload_packet(self, data):
         if data[:4] == consts.MAGIC_COOKIE and data[4] == consts.MESSAGE_TYPE_PAYLOAD:
             total_seg_count = int.from_bytes(data[5:13], 'big')
-            curr_seg_count = int.from_bytes(data[13:21], 'big')
+            curr_seg_count = int.from_bytes(data[13:21], 'big') + 1
             payload = data[21:].decode()
-            print(total_seg_count, curr_seg_count, payload)
             return total_seg_count, curr_seg_count, payload
 
     def handle_offer_packet(self, data, address):
@@ -107,7 +108,7 @@ class Client:
             threading.Thread(target=self.request_tcp).start()
             if self.debug:
                 print(
-                    f"{Fore.CYAN}DEBUG-----Sent request packet (TCP #{i}) {Style.RESET_ALL}")
+                    f"{Fore.CYAN}DEBUG-----Sent request packet (TCP #{i+1}) {Style.RESET_ALL}")
 
         for i in range(self.udp_connections):
             threading.Thread(target=self.request_udp,
@@ -138,6 +139,7 @@ class Client:
 
     def request_udp(self, request_packet):
         try:
+            self.UDP_transfer = True
             # Create a new UDP socket for sending
             udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             udp_socket.bind(("", 0))  # Bind to any available port
@@ -153,24 +155,30 @@ class Client:
             while True:
                 try:
                     packet, _ = udp_socket.recvfrom(1024)
-                    if self.debug:
-                        print(
-                            f"{Fore.LIGHTCYAN_EX}DEBUG-----UDP Received payload packet\n   packet: {packet} {Style.RESET_ALL}")
+                    # if self.debug:
+                    #     print(
+                    #         f"{Fore.LIGHTCYAN_EX}DEBUG-----UDP Received payload packet\n   packet: {packet} {Style.RESET_ALL}")
                     total_seg_count, curr_seg_count, payload = self.handle_payload_packet(
                         packet)
-                    print(f"{Fore.LIGHTCYAN_EX} Received segment {
-                        curr_seg_count}/{total_seg_count} {Style.RESET_ALL}")
+                    if self.debug:
+                        print(f"{Fore.LIGHTCYAN_EX}DEBUG-----UDP Received segment {
+                            curr_seg_count}/{total_seg_count} {Style.RESET_ALL}")
                     recieved_seg_count += 1
                     total_bytes_received += len(payload)
-                    if len(packet) < consts.MESSAGE_SIZE_PAYLOAD:  # End of transmission
+                    if recieved_seg_count == total_seg_count:  # End of transmission
+                        finish_time = time.time()
+                        total_time = round(finish_time - start_time, 4)
+                        total_speed = round(
+                            (total_bytes_received * 8) / total_time, 4)
+                        print(f"UDP transfer finished,\ntotal time: {
+                              total_time} seconds,\ntotal speed: {total_speed} bits/second")
+                        self.UDP_transfer = False
                         break
                 # except socket.timeout:
                 #     break  # Exit on timeout
                 except ValueError as e:
                     print(f"Corrupted Message: {e}")
 
-            finish_time = time.time()
-            total_time = finish_time - start_time
             return total_bytes_received, total_time, recieved_seg_count, total_seg_count
         except Exception as e:
             print(f"Error during UDP request: {e}")
