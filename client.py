@@ -179,7 +179,7 @@ class Client:
         self.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.udp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         # Bind to listen for offers
-        self.udp_socket.bind(("", consts.UDP_BROADCAST_PORT))
+        self.udp_socket.bind(("", consts.BROADCAST_PORT))
 
 
 if __name__ == "__main__":

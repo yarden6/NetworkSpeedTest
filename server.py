@@ -127,7 +127,7 @@ class Server:
             print("Broadcasting offer...")
             while True:
                 self.udp_broadcast_server.sendto(
-                    offer_packet, ('255.255.255.255', 12345))
+                    offer_packet, ('255.255.255.255', consts.BROADCAST_PORT))
                 time.sleep(1)
         except OSError:
             return

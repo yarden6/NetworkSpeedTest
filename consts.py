@@ -1,5 +1,6 @@
 UDP_PORT = 13117
 TCP_PORT = 7490
+BROADCAST_PORT = 12345
 
 MAGIC_COOKIE = b"\xab\xcd\xdc\xba"  # Magic cookie for packet format
 
