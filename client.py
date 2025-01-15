@@ -173,6 +173,8 @@ class Client:
         try:
             # Create a new UDP socket for sending
             udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self.udp_socket.setsockopt(
+                socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             udp_socket.bind(("", 0))  # Bind to any available port
             # udp_socket.settimeout(1.0)  # Set a timeout for receiving data
             udp_socket.sendto(
