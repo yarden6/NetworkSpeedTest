@@ -170,6 +170,9 @@ class Server:
 
 
 if __name__ == "__main__":
-    ip_address = '192.168.1.118'
+    # ip_address = '192.168.1.118'
+    # hostname = socket.gethostname()
+    # ip_address = socket.gethostbyname(hostname)
+    ip_address = '0.0.0.0'
     server = Server(ip_address)
     server.start_server()

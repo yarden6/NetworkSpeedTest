@@ -103,19 +103,43 @@ class Client:
             bytes([consts.MESSAGE_TYPE_REQUEST]) + \
             self.file_size.to_bytes(8, 'big')
 
+        threads = []
+        results_tcp = []
+        results_udp = []
+
+        # Inner functions to send requests and collect results
+        def tcp_request_and_collect():
+            result = self.request_tcp()
+            results_tcp.append(result)
+
+        def udp_request_and_collect(request_packet):
+            result = self.request_udp(request_packet)
+            results_udp.append(result)
+
         # Start the requests in separate threads
         for i in range(self.tcp_connections):
-            threading.Thread(target=self.request_tcp).start()
+            tcp_thread = threading.Thread(target=tcp_request_and_collect)
+            tcp_thread.start()
+            threads.append(tcp_thread)
             if self.debug:
                 print(
                     f"{Fore.CYAN}DEBUG-----Sent request packet (TCP #{i+1}) {Style.RESET_ALL}")
 
         for i in range(self.udp_connections):
-            threading.Thread(target=self.request_udp,
-                             args=(request_packet,)).start()
+            udp_thread = threading.Thread(
+                target=udp_request_and_collect, args=(request_packet,))
+            udp_thread.start()
+            threads.append(udp_thread)
             if self.debug:
                 print(
                     f"{Fore.MAGENTA}DEBUG-----Sent request packet (UDP #{i+1}) {Style.RESET_ALL}")
+
+        # Wait for all threads to finish
+        for thread in threads:
+            thread.join()
+
+        print(f"All transfers complete, listening to offer requests")
+        self.client_state = 1
 
     def request_tcp(self):
         try:
@@ -136,8 +160,9 @@ class Client:
                 total_time = round(finish_time - start_time, 4)
                 total_speed = round(
                     (total_bytes_received * 8) / total_time, 4)
-                print(f"TCP transfer finished,\n   total time: {
-                    total_time} seconds,\n   total speed: {total_speed} bits/second\n")
+                print(f"TCP transfer finished,\n   Total time: {total_time} seconds,\n"
+                      f"   Total speed: {total_speed} bits/second,\n")
+                return {total_time, total_speed}
 
         except ConnectionRefusedError:
             print("Connection refused, server may not be available")
@@ -146,7 +171,6 @@ class Client:
 
     def request_udp(self, request_packet):
         try:
-            self.UDP_transfer = True
             # Create a new UDP socket for sending
             udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             udp_socket.bind(("", 0))  # Bind to any available port
@@ -157,7 +181,7 @@ class Client:
             start_time = time.time()
 
             total_bytes_received = 0
-            recieved_seg_count = 0
+            received_seg_count = 0
 
             while True:
                 try:
@@ -170,23 +194,26 @@ class Client:
                     if self.debug:
                         print(f"{Fore.LIGHTCYAN_EX}DEBUG-----UDP Received segment {
                             curr_seg_count}/{total_seg_count} {Style.RESET_ALL}")
-                    recieved_seg_count += 1
+                    received_seg_count += 1
                     total_bytes_received += len(payload)
-                    if recieved_seg_count == total_seg_count:  # End of transmission
+                    if received_seg_count == total_seg_count:  # End of transmission
                         finish_time = time.time()
                         total_time = round(finish_time - start_time, 4)
                         total_speed = round(
                             (total_bytes_received * 8) / total_time, 4)
-                        print(f"UDP transfer finished,\n   total time: {
-                              total_time} seconds,\n   total speed: {total_speed} bits/second\n")
-                        self.UDP_transfer = False
-                        break
+                        packet_success_percentage = (
+                            received_seg_count / total_seg_count) * 100 if total_seg_count > 0 else 0
+
+                        print(f"UDP transfer finished,\n"
+                              f"   total time: {total_time} seconds,\n"
+                              f"   total speed: {total_speed} bits/second,\n"
+                              f"   percentage of packets received successfully: {packet_success_percentage:.2f}%\n")
+                        return {total_time, total_speed}
                 # except socket.timeout:
                 #     break  # Exit on timeout
                 except ValueError as e:
                     print(f"Corrupted Message: {e}")
-
-            return total_bytes_received, total_time, recieved_seg_count, total_seg_count
+                    return None
         except Exception as e:
             print(f"Error during UDP request: {e}")
 
